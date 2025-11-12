@@ -142,23 +142,23 @@ def main():
     
     initialize_session_state()
     
-    # Custom CSS for better styling
+    # Custom CSS for better styling - compact vertical spacing
     st.markdown("""
     <style>
     .main-header {
         font-size: 2rem;
         font-weight: bold;
         color: #0078d4;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
     }
     .page-title {
         font-size: 2rem;
         font-weight: bold;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
     }
     .section-item {
-        padding: 0.5rem;
-        margin: 0.1rem 0;
+        padding: 0.4rem;
+        margin: 0.05rem 0;
         cursor: pointer;
         border-radius: 4px;
         font-weight: 500;
@@ -174,8 +174,8 @@ def main():
         font-weight: 600;
     }
     .page-item {
-        padding: 0.4rem 0.5rem;
-        margin: 0.05rem 0;
+        padding: 0.3rem 0.4rem;
+        margin: 0.02rem 0;
         cursor: pointer;
         border-radius: 4px;
         font-size: 0.95rem;
@@ -192,18 +192,36 @@ def main():
         font-weight: 600;
         font-size: 0.9rem;
         color: #666;
-        margin-bottom: 0.5rem;
-        padding-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
+        padding-bottom: 0.25rem;
         border-bottom: 1px solid #e0e0e0;
-        min-height: 2rem;
+        min-height: 1.5rem;
     }
     /* Ensure expanders are aligned */
     .streamlit-expanderHeader {
         font-size: 0.9rem !important;
+        padding: 0.25rem 0.5rem !important;
     }
     /* Ensure consistent spacing in columns */
     [data-testid="column"] {
         padding-top: 0 !important;
+    }
+    /* Reduce vertical spacing in main content */
+    .element-container {
+        margin-bottom: 0.5rem !important;
+    }
+    /* Reduce spacing in markdown headers */
+    h3 {
+        margin-top: 0.5rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+    /* Compact spacing for text areas */
+    [data-testid="stTextArea"] {
+        margin-bottom: 0.5rem !important;
+    }
+    /* Reduce spacing between sections */
+    hr {
+        margin: 0.5rem 0 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -453,25 +471,9 @@ def main():
                 
                 st.markdown("---")
                 
-                # Add CSS for content area border - target the container that holds columns
-                container_id = f"content_area_{st.session_state.selected_page}"
-                st.markdown(f"""
-                <style>
-                #{container_id} {{
-                    border: 2px solid #e0e0e0;
-                    border-radius: 8px;
-                    padding: 1rem;
-                    margin: 0.5rem 0;
-                    background-color: #fafafa;
-                }}
-                </style>
-                """, unsafe_allow_html=True)
-                
-                # Container for both editor and preview with border
+                # Container for both editor and preview
                 content_container = st.container()
                 with content_container:
-                    st.markdown(f'<div id="{container_id}">', unsafe_allow_html=True)
-                    
                     # Split content area into Markdown Editor (left) and Preview (right)
                     col_editor, col_preview = st.columns([1, 1])
                     
@@ -482,7 +484,7 @@ def main():
                         content = st.text_area(
                             "Markdown Content",
                             value=st.session_state.page_content,
-                            height=600,
+                            height=650,
                             key=f"page_content_editor_{st.session_state.selected_page}",
                             help="Write your content in Markdown format. Use '- [ ]' for TODO items and '- [x]' for completed items.",
                             label_visibility="collapsed"
@@ -496,8 +498,6 @@ def main():
                             st.markdown(content)
                         else:
                             st.info("Start typing in the editor to see the preview here.")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Update session state with current content
                 st.session_state.page_content = content

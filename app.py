@@ -37,6 +37,8 @@ def initialize_session_state():
         st.session_state.page_content = ""
     if 'expanded_sections' not in st.session_state:
         st.session_state.expanded_sections = set()
+    if 'editor_collapsed' not in st.session_state:
+        st.session_state.editor_collapsed = False
 
 def create_notebook(name):
     """Create a new notebook"""
@@ -471,33 +473,52 @@ def main():
                 
                 st.markdown("---")
                 
+                # Toggle button for collapsing editor
+                col_toggle1, col_toggle2 = st.columns([6, 1])
+                with col_toggle1:
+                    st.markdown("")  # Spacer
+                with col_toggle2:
+                    toggle_label = "👁️ Hide Editor" if not st.session_state.editor_collapsed else "📝 Show Editor"
+                    if st.button(toggle_label, key="toggle_editor", use_container_width=True):
+                        st.session_state.editor_collapsed = not st.session_state.editor_collapsed
+                        st.rerun()
+                
                 # Container for both editor and preview
                 content_container = st.container()
                 with content_container:
-                    # Split content area into Markdown Editor (left) and Preview (right)
-                    col_editor, col_preview = st.columns([1, 1])
-                    
-                    with col_editor:
-                        st.markdown("### 📝 Markdown Editor")
-                        
-                        # Markdown Editor
-                        content = st.text_area(
-                            "Markdown Content",
-                            value=st.session_state.page_content,
-                            height=650,
-                            key=f"page_content_editor_{st.session_state.selected_page}",
-                            help="Write your content in Markdown format. Use '- [ ]' for TODO items and '- [x]' for completed items.",
-                            label_visibility="collapsed"
-                        )
-                    
-                    with col_preview:
+                    if st.session_state.editor_collapsed:
+                        # Only show preview when editor is collapsed
                         st.markdown("### 👁️ Preview")
-                        
-                        # Markdown Preview
+                        content = st.session_state.page_content
                         if content:
                             st.markdown(content)
                         else:
                             st.info("Start typing in the editor to see the preview here.")
+                    else:
+                        # Split content area into Markdown Editor (left) and Preview (right)
+                        col_editor, col_preview = st.columns([1, 1])
+                        
+                        with col_editor:
+                            st.markdown("### 📝 Markdown Editor")
+                            
+                            # Markdown Editor
+                            content = st.text_area(
+                                "Markdown Content",
+                                value=st.session_state.page_content,
+                                height=650,
+                                key=f"page_content_editor_{st.session_state.selected_page}",
+                                help="Write your content in Markdown format. Use '- [ ]' for TODO items and '- [x]' for completed items.",
+                                label_visibility="collapsed"
+                            )
+                        
+                        with col_preview:
+                            st.markdown("### 👁️ Preview")
+                            
+                            # Markdown Preview
+                            if content:
+                                st.markdown(content)
+                            else:
+                                st.info("Start typing in the editor to see the preview here.")
                 
                 # Update session state with current content
                 st.session_state.page_content = content

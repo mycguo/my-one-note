@@ -208,6 +208,14 @@ def main():
     [data-testid="column"] {
         padding-top: 0 !important;
     }
+    /* Reduce spacing between buttons in sections and pages columns */
+    [data-testid="column"] [data-testid="stVerticalBlock"] > div[data-testid="element-container"] {
+        margin-bottom: 0.15rem !important;
+    }
+    [data-testid="column"] button {
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
     /* Reduce vertical spacing in main content */
     .element-container {
         margin-bottom: 0.5rem !important;
@@ -325,6 +333,28 @@ def main():
         notebook = notebooks[st.session_state.selected_notebook]
         sections = notebook.get('sections', {})
         
+        # Generate all section styles at once - moved outside columns to prevent layout shift
+        if sections:
+            section_styles = []
+            section_colors = {
+                'management': '#9c27b0',
+                'team': '#2196f3',
+                'quick_notes': '#4caf50',
+                'default': '#757575'
+            }
+            
+            for section_id in sections.keys():
+                color = section_colors.get(section_id, section_colors['default'])
+                section_styles.append(f"""
+                .section-btn-{section_id} {{
+                    border-left: 4px solid {color} !important;
+                }}
+                """)
+            
+            # Inject all styles in one go
+            if section_styles:
+                st.markdown(f"<style>{''.join(section_styles)}</style>", unsafe_allow_html=True)
+        
         # Create three columns
         col_sections, col_pages, col_content = st.columns([1, 1, 6])
         
@@ -347,24 +377,6 @@ def main():
                 for section_id, section in sections.items():
                     section_selected = st.session_state.selected_section == section_id
                     
-                    # Section colors (matching OneNote style)
-                    section_colors = {
-                        'management': '#9c27b0',
-                        'team': '#2196f3',
-                        'quick_notes': '#4caf50',
-                        'default': '#757575'
-                    }
-                    color = section_colors.get(section_id, section_colors['default'])
-                    
-                    button_style = f"""
-                    <style>
-                    .section-btn-{section_id} {{
-                        border-left: 4px solid {color} !important;
-                    }}
-                    </style>
-                    """
-                    st.markdown(button_style, unsafe_allow_html=True)
-                    
                     if st.button(
                         f"📑 {section['name']}",
                         key=f"section_{section_id}_col1",
@@ -380,12 +392,9 @@ def main():
         # Column 2: Pages
         with col_pages:
             st.markdown('<div class="column-header">Pages</div>', unsafe_allow_html=True)
-            
+
+            # Add Page button - always show for consistent alignment
             if st.session_state.selected_section and st.session_state.selected_section in sections:
-                section = sections[st.session_state.selected_section]
-                pages = section.get('pages', {})
-                
-                # Add Page button
                 with st.expander("➕ Add Page", expanded=False):
                     new_page_name = st.text_input("Page Name", key="new_page_col2", label_visibility="collapsed")
                     if st.button("Create", key="create_page_btn_col2"):
@@ -394,12 +403,20 @@ def main():
                             st.rerun()
                         else:
                             st.error("Please enter a valid page name or page already exists")
-                
-                # Display pages
+            else:
+                # Empty expander placeholder for alignment
+                with st.expander("➕ Add Page", expanded=False):
+                    st.info("Select a section first")
+
+            # Display pages
+            if st.session_state.selected_section and st.session_state.selected_section in sections:
+                section = sections[st.session_state.selected_section]
+                pages = section.get('pages', {})
+
                 if pages:
                     for page_id, page in pages.items():
                         page_selected = st.session_state.selected_page == page_id
-                        
+
                         if st.button(
                             f"📄 {page['name']}",
                             key=f"page_{page_id}_col2",

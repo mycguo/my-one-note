@@ -330,13 +330,17 @@ def main():
     hr {
         margin: 0.5rem 0 !important;
     }
+    /* Align logout button with expander */
+    div[data-testid="column"]:nth-of-type(4) button {
+        margin-top: 2.1rem !important;
+    }
     </style>
     """, unsafe_allow_html=True)
     
     # Top Bar - Notebook Selection
     notebooks = st.session_state.notebooks
     
-    col_top1, col_top2, col_top3, col_top4 = st.columns([3, 1, 1, 0.5], vertical_alignment="center")
+    col_top1, col_top2, col_top3, col_top4 = st.columns([3, 1, 1, 0.5], vertical_alignment="top")
     with col_top1:
         st.markdown('<div class="main-header">📓 My OneNote</div>', unsafe_allow_html=True)
         
@@ -420,9 +424,9 @@ def main():
             st.selectbox("Notebook", ["No notebooks"], key="notebook_selector_empty", label_visibility="collapsed", disabled=True)
     
     with col_top3:
-        with st.expander("➕ Create Notebook", expanded=False):
-            new_notebook_name = st.text_input("Notebook Name", key="new_notebook_top", label_visibility="collapsed")
-            if st.button("Create", key="create_notebook_btn_top"):
+        with st.expander("➕ Notebook", expanded=False):
+            new_notebook_name = st.text_input("New Notebook Name", key="new_notebook_top", label_visibility="collapsed", placeholder="New Notebook Name")
+            if st.button("Create", key="create_notebook_btn_top", use_container_width=True):
                 if create_notebook(new_notebook_name):
                     st.success(f"Notebook '{new_notebook_name}' created!")
                     st.rerun()
@@ -469,7 +473,7 @@ def main():
             st.markdown('<div class="column-header">Sections</div>', unsafe_allow_html=True)
             
             # Add Section button
-            with st.expander("➕ Add Section", expanded=False):
+            with st.expander("➕ Section", expanded=False):
                 new_section_name = st.text_input("Section Name", key="new_section_col1", label_visibility="collapsed")
                 if st.button("Create", key="create_section_btn_col1"):
                     if create_section(st.session_state.selected_notebook, new_section_name):
@@ -493,7 +497,7 @@ def main():
                         st.session_state.selected_page = None
                         st.rerun()
             else:
-                st.info("No sections yet. Create one to get started!")
+                st.info("Create a Section")
         
         # Column 2: Pages
         with col_pages:
@@ -501,7 +505,7 @@ def main():
 
             # Add Page button - always show for consistent alignment
             if st.session_state.selected_section and st.session_state.selected_section in sections:
-                with st.expander("➕ Add Page", expanded=False):
+                with st.expander("➕ Page", expanded=False):
                     new_page_name = st.text_input("Page Name", key="new_page_col2", label_visibility="collapsed")
                     if st.button("Create", key="create_page_btn_col2"):
                         if create_page(st.session_state.selected_notebook, st.session_state.selected_section, new_page_name):
@@ -511,7 +515,7 @@ def main():
                             st.error("Please enter a valid page name or page already exists")
             else:
                 # Empty expander placeholder for alignment
-                with st.expander("➕ Add Page", expanded=False):
+                with st.expander("➕ Page", expanded=False):
                     st.info("Select a section first")
 
             # Display pages
@@ -540,9 +544,9 @@ def main():
                                     st.session_state[key] = False
                             st.rerun()
                 else:
-                    st.info("No pages yet. Create one to get started!")
+                    st.info("Create a Page")
             else:
-                st.info("👈 Select a section to view pages")
+                st.info("👈 Select a section")
         
         # Column 3: Content
         with col_content:
@@ -671,7 +675,7 @@ def main():
             elif st.session_state.selected_section:
                 st.info("👈 Select a page to start editing")
             elif st.session_state.selected_notebook:
-                st.info("👈 Select a section to view pages")
+                st.info("👈 Select a section")
             else:
                 st.info("👈 Select a notebook, section, and page to start editing")
     else:

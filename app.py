@@ -4,10 +4,12 @@ import os
 from datetime import datetime
 from pathlib import Path
 from utils.encryption import encrypt_data, decrypt_data, is_encryption_enabled
+from utils.auth import is_user_logged_in, login, logout
 
 # Configuration
 DATA_DIR = Path("data")
 NOTEBOOKS_FILE = DATA_DIR / "notebooks.json"
+CONFIG_FILE = DATA_DIR / "config.json"
 
 # Initialize data directory
 DATA_DIR.mkdir(exist_ok=True)
@@ -53,12 +55,36 @@ def save_notebooks(notebooks):
         with open(NOTEBOOKS_FILE, 'w') as f:
             f.write(json_data)
 
+def load_config():
+    """Load configuration"""
+    if CONFIG_FILE.exists():
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_config(config):
+    """Save configuration"""
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=2)
+    except Exception as e:
+        print(f"Error saving config: {e}")
+
 def initialize_session_state():
     """Initialize session state variables"""
     if 'notebooks' not in st.session_state:
         st.session_state.notebooks = load_notebooks()
     if 'selected_notebook' not in st.session_state:
-        st.session_state.selected_notebook = None
+        # Try to load last selected notebook from config
+        config = load_config()
+        last_notebook = config.get('last_selected_notebook')
+        if last_notebook and last_notebook in st.session_state.notebooks:
+            st.session_state.selected_notebook = last_notebook
+        else:
+            st.session_state.selected_notebook = None
     if 'selected_section' not in st.session_state:
         st.session_state.selected_section = None
     if 'selected_page' not in st.session_state:
@@ -133,6 +159,11 @@ def delete_notebook(notebook_id):
             st.session_state.selected_notebook = None
             st.session_state.selected_section = None
             st.session_state.selected_page = None
+            # Update config
+            config = load_config()
+            if config.get('last_selected_notebook') == notebook_id:
+                config['last_selected_notebook'] = None
+                save_config(config)
 
 def delete_section(notebook_id, section_id):
     """Delete a section"""
@@ -164,6 +195,38 @@ def save_page_content(notebook_id, section_id, page_id, content):
         st.session_state.notebooks[notebook_id]['sections'][section_id]['pages'][page_id]['updated_at'] = datetime.now().isoformat()
         save_notebooks(st.session_state.notebooks)
 
+def login_screen():
+    st.markdown("""
+    <style>
+    .login-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify_content: center;
+        padding: 2rem;
+        text-align: center;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("## 🔐 Please log in")
+        st.markdown("Access to your notes requires authentication.")
+        
+        # Only show login button if login hasn't been attempted yet
+        if 'login_attempted' not in st.session_state:
+            print("DEBUG: Rendering login button")
+            st.button("Log in with Google", on_click=login, use_container_width=True, type="primary")
+        else:
+            print("DEBUG: Login attempted, showing progress")
+            st.info("🔄 Login in progress... Please complete the authentication.")
+            if st.button("Reset login state"):
+                print("DEBUG: Resetting login state")
+                if 'login_attempted' in st.session_state:
+                    del st.session_state['login_attempted']
+                st.rerun()
+
 def main():
     st.set_page_config(
         page_title="My OneNote",
@@ -171,6 +234,10 @@ def main():
         layout="wide",
         initial_sidebar_state="collapsed"
     )
+
+    if not is_user_logged_in():
+        login_screen()
+        return
     
     initialize_session_state()
     
@@ -269,7 +336,7 @@ def main():
     # Top Bar - Notebook Selection
     notebooks = st.session_state.notebooks
     
-    col_top1, col_top2, col_top3 = st.columns([3, 1, 1])
+    col_top1, col_top2, col_top3, col_top4 = st.columns([3, 1, 1, 0.5], vertical_alignment="center")
     with col_top1:
         st.markdown('<div class="main-header">📓 My OneNote</div>', unsafe_allow_html=True)
         
@@ -338,6 +405,12 @@ def main():
                     st.session_state.selected_notebook = selected_notebook_id
                     st.session_state.selected_section = None
                     st.session_state.selected_page = None
+                    
+                    # Save selection to config
+                    config = load_config()
+                    config['last_selected_notebook'] = selected_notebook_id
+                    save_config(config)
+                    
                     # Reset edit state when switching notebooks
                     for key in list(st.session_state.keys()):
                         if key.startswith('edit_notebook_name_'):
@@ -355,6 +428,9 @@ def main():
                     st.rerun()
                 else:
                     st.error("Please enter a valid notebook name or notebook already exists")
+    
+    with col_top4:
+        st.button("Log out", on_click=logout, key="logout_btn_top", use_container_width=True)
     
     st.markdown("---")
     
@@ -620,6 +696,8 @@ def main():
         - ✏️ Markdown support for formatting
         - 💾 Auto-save functionality
         """)
+
+
 
 if __name__ == "__main__":
     main()

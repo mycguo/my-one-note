@@ -1,4 +1,6 @@
 streamlit
 cryptography>=1.28.0
 Authlib>=1.3.2
+psycopg2-binary
+sqlalchemy
 

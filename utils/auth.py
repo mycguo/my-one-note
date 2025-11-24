@@ -155,3 +155,23 @@ def logout():
                 del st.session_state['login_attempted']
             if 'user_id' in st.session_state:
                 del st.session_state['user_id']
+
+def get_user_info():
+    """
+    Get current user info from Streamlit auth.
+    
+    Returns:
+        Dict with 'email' and 'name' keys.
+        Returns {'email': 'unknown', 'name': 'Unknown'} if not logged in or auth not available.
+    """
+    if HAS_STREAMLIT:
+        try:
+            if hasattr(st, 'user') and hasattr(st.user, 'email'):
+                return {
+                    'email': st.user.email,
+                    'name': getattr(st.user, 'name', 'Unknown')
+                }
+        except (AttributeError, Exception):
+            pass
+            
+    return {'email': 'unknown', 'name': 'Unknown'}

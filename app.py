@@ -3,57 +3,21 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
-from utils.encryption import encrypt_data, decrypt_data, is_encryption_enabled
-from utils.auth import is_user_logged_in, login, logout
+from utils.auth import is_user_logged_in, login, logout, get_user_info
+from utils.db import (
+    get_user_notebooks, create_notebook_db, update_notebook_name_db,
+    delete_notebook_db, create_section_db, delete_section_db,
+    create_page_db, delete_page_db,
+    save_page_content_db, load_page_content_db
+)
 
 # Configuration
 DATA_DIR = Path("data")
-NOTEBOOKS_FILE = DATA_DIR / "notebooks.json"
+# Config file for storing user preferences
 CONFIG_FILE = DATA_DIR / "config.json"
 
 # Initialize data directory
 DATA_DIR.mkdir(exist_ok=True)
-
-def load_notebooks():
-    """Load all notebooks from storage"""
-    if NOTEBOOKS_FILE.exists():
-        try:
-            # Try reading as encrypted first
-            with open(NOTEBOOKS_FILE, 'rb') as f:
-                file_content = f.read()
-                
-            if is_encryption_enabled():
-                # Try to decrypt
-                decrypted_content = decrypt_data(file_content)
-                return json.loads(decrypted_content.decode('utf-8'))
-            else:
-                # If encryption not enabled, try to load as plain json
-                # This handles the case where we might have encrypted data but no key (will fail)
-                # or plain data and no key (will work)
-                return json.loads(file_content.decode('utf-8'))
-        except Exception:
-            # Fallback to plain text reading for migration or error recovery
-            try:
-                with open(NOTEBOOKS_FILE, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"Error loading notebooks: {e}")
-                return {}
-    return {}
-
-def save_notebooks(notebooks):
-    """Save all notebooks to storage"""
-    json_data = json.dumps(notebooks, indent=2)
-    
-    if is_encryption_enabled():
-        # Encrypt and save as binary
-        encrypted_data = encrypt_data(json_data.encode('utf-8'))
-        with open(NOTEBOOKS_FILE, 'wb') as f:
-            f.write(encrypted_data)
-    else:
-        # Save as plain text
-        with open(NOTEBOOKS_FILE, 'w') as f:
-            f.write(json_data)
 
 def load_config():
     """Load configuration"""
@@ -75,8 +39,13 @@ def save_config(config):
 
 def initialize_session_state():
     """Initialize session state variables"""
-    if 'notebooks' not in st.session_state:
-        st.session_state.notebooks = load_notebooks()
+    # Always load notebooks from DB to ensure sync
+    user_info = get_user_info()
+    if user_info:
+        user_email = user_info.get('email', 'unknown')
+        st.session_state.notebooks = get_user_notebooks(user_email)
+    else:
+        st.session_state.notebooks = {}
     if 'selected_notebook' not in st.session_state:
         # Try to load last selected notebook from config
         config = load_config()
@@ -98,63 +67,83 @@ def initialize_session_state():
 
 def create_notebook(name):
     """Create a new notebook"""
-    if name and name.strip():
-        notebook_id = name.strip().lower().replace(' ', '_')
-        if notebook_id not in st.session_state.notebooks:
-            st.session_state.notebooks[notebook_id] = {
-                'name': name.strip(),
-                'sections': {},
-                'created_at': datetime.now().isoformat()
-            }
-            save_notebooks(st.session_state.notebooks)
-            return True
+    user_info = get_user_info()
+    if not user_info: return False
+    user_email = user_info.get('email', 'unknown')
+
+    if not name or name.strip() == "":
+        return False
+
+    if create_notebook_db(user_email, name):
+        # Reload notebooks to get the new ID
+        if 'notebooks' in st.session_state:
+            del st.session_state['notebooks']
+        initialize_session_state()
+        
+        # Find and select the new notebook
+        for nid, nb in st.session_state.notebooks.items():
+            if nb['name'] == name:
+                st.session_state.selected_notebook = nid
+                break
+                
+        st.session_state.selected_section = None
+        st.session_state.selected_page = None
+        return True
     return False
 
 def create_section(notebook_id, section_name):
-    """Create a new section in a notebook"""
-    if section_name and section_name.strip():
-        section_id = section_name.strip().lower().replace(' ', '_')
-        if notebook_id in st.session_state.notebooks:
-            if section_id not in st.session_state.notebooks[notebook_id]['sections']:
-                st.session_state.notebooks[notebook_id]['sections'][section_id] = {
-                    'name': section_name.strip(),
-                    'pages': {},
-                    'created_at': datetime.now().isoformat()
-                }
-                save_notebooks(st.session_state.notebooks)
-                return True
+    """Create a new section in the specified notebook"""
+    if not section_name or section_name.strip() == "":
+        return False
+
+    if create_section_db(notebook_id, section_name):
+        # Reload notebooks
+        if 'notebooks' in st.session_state:
+            del st.session_state['notebooks']
+        initialize_session_state()
+        
+        st.session_state.selected_section = section_name
+        st.session_state.selected_page = None
+        return True
     return False
 
-def create_page(notebook_id, section_id, page_name):
-    """Create a new page in a section"""
-    if page_name and page_name.strip():
-        page_id = page_name.strip().lower().replace(' ', '_')
-        if (notebook_id in st.session_state.notebooks and 
-            section_id in st.session_state.notebooks[notebook_id]['sections']):
-            if page_id not in st.session_state.notebooks[notebook_id]['sections'][section_id]['pages']:
-                st.session_state.notebooks[notebook_id]['sections'][section_id]['pages'][page_id] = {
-                    'name': page_name.strip(),
-                    'content': '',
-                    'created_at': datetime.now().isoformat(),
-                    'updated_at': datetime.now().isoformat()
-                }
-                save_notebooks(st.session_state.notebooks)
-                return True
+def create_page(notebook_id, section_name, page_name):
+    """Create a new page in the specified section"""
+    if not page_name or page_name.strip() == "":
+        return False
+
+    if create_page_db(notebook_id, section_name, page_name):
+        # Reload notebooks
+        if 'notebooks' in st.session_state:
+            del st.session_state['notebooks']
+        initialize_session_state()
+        
+        st.session_state.selected_page = page_name
+        st.session_state.page_content = ""
+        return True
     return False
 
 def update_notebook_name(notebook_id, new_name):
     """Update notebook name"""
-    if notebook_id in st.session_state.notebooks and new_name and new_name.strip():
-        st.session_state.notebooks[notebook_id]['name'] = new_name.strip()
-        save_notebooks(st.session_state.notebooks)
+    if not new_name or new_name.strip() == "":
+        return False
+
+    if update_notebook_name_db(notebook_id, new_name):
+        # Reload notebooks
+        if 'notebooks' in st.session_state:
+            del st.session_state['notebooks']
+        initialize_session_state()
         return True
     return False
 
 def delete_notebook(notebook_id):
     """Delete a notebook"""
-    if notebook_id in st.session_state.notebooks:
-        del st.session_state.notebooks[notebook_id]
-        save_notebooks(st.session_state.notebooks)
+    if delete_notebook_db(notebook_id):
+        # Reload notebooks
+        if 'notebooks' in st.session_state:
+            del st.session_state['notebooks']
+        initialize_session_state()
+        
         if st.session_state.selected_notebook == notebook_id:
             st.session_state.selected_notebook = None
             st.session_state.selected_section = None
@@ -164,36 +153,45 @@ def delete_notebook(notebook_id):
             if config.get('last_selected_notebook') == notebook_id:
                 config['last_selected_notebook'] = None
                 save_config(config)
+        return True
+    return False
 
 def delete_section(notebook_id, section_id):
     """Delete a section"""
-    if (notebook_id in st.session_state.notebooks and 
-        section_id in st.session_state.notebooks[notebook_id]['sections']):
-        del st.session_state.notebooks[notebook_id]['sections'][section_id]
-        save_notebooks(st.session_state.notebooks)
+    # Note: section_id passed here is actually the section name in the current app structure logic 
+    # (see create_section where selected_section = section_name)
+    # But wait, get_user_notebooks returns sections keyed by NAME.
+    # So section_id IS the name.
+    if delete_section_db(notebook_id, section_id):
+        # Reload notebooks
+        if 'notebooks' in st.session_state:
+            del st.session_state['notebooks']
+        initialize_session_state()
+        
         if st.session_state.selected_section == section_id:
             st.session_state.selected_section = None
             st.session_state.selected_page = None
+        return True
+    return False
 
 def delete_page(notebook_id, section_id, page_id):
     """Delete a page"""
-    if (notebook_id in st.session_state.notebooks and 
-        section_id in st.session_state.notebooks[notebook_id]['sections'] and
-        page_id in st.session_state.notebooks[notebook_id]['sections'][section_id]['pages']):
-        del st.session_state.notebooks[notebook_id]['sections'][section_id]['pages'][page_id]
-        save_notebooks(st.session_state.notebooks)
+    # section_id is name, page_id is name
+    if delete_page_db(notebook_id, section_id, page_id):
+        # Reload notebooks
+        if 'notebooks' in st.session_state:
+            del st.session_state['notebooks']
+        initialize_session_state()
+        
         if st.session_state.selected_page == page_id:
             st.session_state.selected_page = None
             st.session_state.page_content = ""
+        return True
+    return False
 
-def save_page_content(notebook_id, section_id, page_id, content):
-    """Save page content"""
-    if (notebook_id in st.session_state.notebooks and 
-        section_id in st.session_state.notebooks[notebook_id]['sections'] and
-        page_id in st.session_state.notebooks[notebook_id]['sections'][section_id]['pages']):
-        st.session_state.notebooks[notebook_id]['sections'][section_id]['pages'][page_id]['content'] = content
-        st.session_state.notebooks[notebook_id]['sections'][section_id]['pages'][page_id]['updated_at'] = datetime.now().isoformat()
-        save_notebooks(st.session_state.notebooks)
+def save_page_content(notebook_id, section_name, page_name, content):
+    """Save content of a page"""
+    save_page_content_db(notebook_id, section_name, page_name, content)
 
 def login_screen():
     st.markdown("""
@@ -208,12 +206,12 @@ def login_screen():
     }
     </style>
     """, unsafe_allow_html=True)
-    
+
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("## 🔐 Please log in")
         st.markdown("Access to your notes requires authentication.")
-        
+
         # Only show login button if login hasn't been attempted yet
         if 'login_attempted' not in st.session_state:
             print("DEBUG: Rendering login button")
@@ -238,9 +236,9 @@ def main():
     if not is_user_logged_in():
         login_screen()
         return
-    
+
     initialize_session_state()
-    
+
     # Custom CSS for better styling - compact vertical spacing
     st.markdown("""
     <style>
@@ -340,27 +338,27 @@ def main():
     }
     </style>
     """, unsafe_allow_html=True)
-    
+
     # Top Bar - Notebook Selection
     notebooks = st.session_state.notebooks
-    
+
     # Layout: Title | Edit Name | Selector | Create | Logout
     col_title, col_edit_name, col_select, col_create, col_logout = st.columns([1.5, 2, 1.5, 1, 0.5], vertical_alignment="center")
-    
+
     with col_title:
         st.markdown('<div class="main-header">📓 My OneNote</div>', unsafe_allow_html=True)
-        
+
     with col_edit_name:
         # Display notebook name if one is selected
         if notebooks and st.session_state.selected_notebook and st.session_state.selected_notebook in notebooks:
             notebook = notebooks[st.session_state.selected_notebook]
             notebook_name = notebook['name']
-            
+
             # Initialize edit state
             edit_key = f"edit_notebook_name_{st.session_state.selected_notebook}"
             if edit_key not in st.session_state:
                 st.session_state[edit_key] = False
-            
+
             if st.session_state[edit_key]:
                 # Edit mode - input field with save/cancel buttons inline
                 c1, c2, c3 = st.columns([3, 1, 1])
@@ -389,7 +387,7 @@ def main():
                 if st.button(f"{notebook_name} ✏️", key=f"edit_trigger_{st.session_state.selected_notebook}", help="Click to edit notebook name"):
                     st.session_state[edit_key] = True
                     st.rerun()
-    
+
     with col_select:
         if notebooks:
             notebook_options = ["Select a notebook..."] + [notebooks[nb]['name'] for nb in notebooks.keys()]
@@ -397,7 +395,7 @@ def main():
             selected_index = 0
             if st.session_state.selected_notebook in notebooks:
                 selected_index = notebook_ids.index(st.session_state.selected_notebook)
-            
+
             selected_notebook_name = st.selectbox(
                 "Notebook",
                 notebook_options,
@@ -405,19 +403,19 @@ def main():
                 key="notebook_selector_top",
                 label_visibility="collapsed"
             )
-            
+
             if selected_notebook_name != "Select a notebook...":
                 selected_notebook_id = notebook_ids[notebook_options.index(selected_notebook_name)]
                 if st.session_state.selected_notebook != selected_notebook_id:
                     st.session_state.selected_notebook = selected_notebook_id
                     st.session_state.selected_section = None
                     st.session_state.selected_page = None
-                    
+
                     # Save selection to config
                     config = load_config()
                     config['last_selected_notebook'] = selected_notebook_id
                     save_config(config)
-                    
+
                     # Reset edit state when switching notebooks
                     for key in list(st.session_state.keys()):
                         if key.startswith('edit_notebook_name_'):
@@ -425,7 +423,7 @@ def main():
                     st.rerun()
         else:
             st.selectbox("Notebook", ["No notebooks"], key="notebook_selector_empty", label_visibility="collapsed", disabled=True)
-    
+
     with col_create:
         with st.expander("➕ Notebook", expanded=False):
             new_notebook_name = st.text_input("New Notebook Name", key="new_notebook_top", label_visibility="collapsed", placeholder="New Notebook Name")
@@ -435,17 +433,17 @@ def main():
                     st.rerun()
                 else:
                     st.error("Please enter a valid notebook name or notebook already exists")
-    
+
     with col_logout:
         st.button("Log out", on_click=logout, key="logout_btn_top", use_container_width=True)
-    
+
     st.markdown("---")
-    
+
     # Three Column Layout: Sections | Pages | Content
     if notebooks and st.session_state.selected_notebook and st.session_state.selected_notebook in notebooks:
         notebook = notebooks[st.session_state.selected_notebook]
         sections = notebook.get('sections', {})
-        
+
         # Generate all section styles at once - moved outside columns to prevent layout shift
         if sections:
             section_styles = []
@@ -455,7 +453,7 @@ def main():
                 'quick_notes': '#4caf50',
                 'default': '#757575'
             }
-            
+
             for section_id in sections.keys():
                 color = section_colors.get(section_id, section_colors['default'])
                 section_styles.append(f"""
@@ -463,18 +461,18 @@ def main():
                     border-left: 4px solid {color} !important;
                 }}
                 """)
-            
+
             # Inject all styles in one go
             if section_styles:
                 st.markdown(f"<style>{''.join(section_styles)}</style>", unsafe_allow_html=True)
-        
+
         # Create three columns
         col_sections, col_pages, col_content = st.columns([1, 1, 6])
-        
+
         # Column 1: Sections
         with col_sections:
             st.markdown('<div class="column-header">Sections</div>', unsafe_allow_html=True)
-            
+
             # Add Section button
             with st.expander("➕ Section", expanded=False):
                 new_section_name = st.text_input("Section Name", key="new_section_col1", label_visibility="collapsed")
@@ -484,12 +482,12 @@ def main():
                         st.rerun()
                     else:
                         st.error("Please enter a valid section name or section already exists")
-            
+
             # Display sections
             if sections:
                 for section_id, section in sections.items():
                     section_selected = st.session_state.selected_section == section_id
-                    
+
                     if st.button(
                         f"📑 {section['name']}",
                         key=f"section_{section_id}_col1",
@@ -501,7 +499,7 @@ def main():
                         st.rerun()
             else:
                 st.info("Create a Section")
-        
+
         # Column 2: Pages
         with col_pages:
             st.markdown('<div class="column-header">Pages</div>', unsafe_allow_html=True)
@@ -538,7 +536,11 @@ def main():
                         ):
                             st.session_state.selected_page = page_id
                             # Load page content immediately
-                            st.session_state.page_content = page.get('content', '')
+                            st.session_state.page_content = load_page_content_db(
+                                st.session_state.selected_notebook,
+                                st.session_state.selected_section,
+                                page_id
+                            )
                             # Reset save state when switching pages
                             st.session_state.save_clicked = False
                             # Reset delete confirmation state when switching pages
@@ -550,16 +552,20 @@ def main():
                     st.info("Create a Page")
             else:
                 st.info("👈 Select a section")
-        
+
         # Column 3: Content
         with col_content:
             if st.session_state.selected_notebook and st.session_state.selected_section and st.session_state.selected_page:
                 notebook = notebooks[st.session_state.selected_notebook]
                 section = notebook['sections'][st.session_state.selected_section]
                 page = section['pages'][st.session_state.selected_page]
-                
+
                 # Load page content - always sync with page data when page changes
-                current_content = page.get('content', '')
+                current_content = load_page_content_db(
+                    st.session_state.selected_notebook,
+                    st.session_state.selected_section,
+                    st.session_state.selected_page
+                )
                 # Update session state if content differs (handles page switching)
                 if st.session_state.page_content != current_content:
                     st.session_state.page_content = current_content

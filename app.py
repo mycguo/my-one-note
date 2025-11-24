@@ -288,13 +288,13 @@ def main():
         font-weight: 500;
     }
     .column-header {
-        font-weight: 600;
-        font-size: 0.9rem;
-        color: #666;
-        margin-bottom: 0.25rem;
+        font-weight: 700;
+        font-size: 1.2rem;
+        color: #333;
+        margin-bottom: 0.5rem;
         padding-bottom: 0.25rem;
-        border-bottom: 1px solid #e0e0e0;
-        min-height: 1.5rem;
+        border-bottom: 2px solid #e0e0e0;
+        min-height: 2rem;
     }
     /* Ensure expanders are aligned */
     .streamlit-expanderHeader {
@@ -330,9 +330,13 @@ def main():
     hr {
         margin: 0.5rem 0 !important;
     }
-    /* Align logout button with expander */
-    div[data-testid="column"]:nth-of-type(4) button {
-        margin-top: 2.1rem !important;
+    /* Fine-tune alignment for header elements */
+    /* Target the buttons in the 2nd (Edit Name) and 5th (Logout) columns */
+    div[data-testid="column"]:nth-of-type(2) button {
+        margin-top: 0.4rem !important;
+    }
+    div[data-testid="column"]:nth-of-type(5) button {
+        margin-top: 0.4rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -340,10 +344,13 @@ def main():
     # Top Bar - Notebook Selection
     notebooks = st.session_state.notebooks
     
-    col_top1, col_top2, col_top3, col_top4 = st.columns([3, 1, 1, 0.5], vertical_alignment="top")
-    with col_top1:
+    # Layout: Title | Edit Name | Selector | Create | Logout
+    col_title, col_edit_name, col_select, col_create, col_logout = st.columns([1.5, 2, 1.5, 1, 0.5], vertical_alignment="center")
+    
+    with col_title:
         st.markdown('<div class="main-header">📓 My OneNote</div>', unsafe_allow_html=True)
         
+    with col_edit_name:
         # Display notebook name if one is selected
         if notebooks and st.session_state.selected_notebook and st.session_state.selected_notebook in notebooks:
             notebook = notebooks[st.session_state.selected_notebook]
@@ -356,38 +363,34 @@ def main():
             
             if st.session_state[edit_key]:
                 # Edit mode - input field with save/cancel buttons inline
-                col_edit1, col_edit2, col_edit3 = st.columns([6, 1, 1])
-                with col_edit1:
+                c1, c2, c3 = st.columns([3, 1, 1])
+                with c1:
                     new_name = st.text_input(
                         "Notebook Name",
                         value=notebook_name,
                         key=f"notebook_name_input_{st.session_state.selected_notebook}",
                         label_visibility="collapsed"
                     )
-                with col_edit2:
+                with c2:
                     if st.button("✓", key=f"save_name_{st.session_state.selected_notebook}", use_container_width=True):
                         if new_name and new_name.strip() and new_name != notebook_name:
                             if update_notebook_name(st.session_state.selected_notebook, new_name):
-                                st.success("Notebook name updated!")
+                                st.success("Updated!")
                             else:
-                                st.error("Failed to update notebook name")
+                                st.error("Failed")
                         st.session_state[edit_key] = False
                         st.rerun()
-                with col_edit3:
+                with c3:
                     if st.button("✗", key=f"cancel_name_{st.session_state.selected_notebook}", use_container_width=True):
                         st.session_state[edit_key] = False
                         st.rerun()
             else:
-                # Display mode - name with edit button inline
-                col_name, col_edit, _ = st.columns([1, 1, 10])
-                with col_name:
-                    st.markdown(f'<div style="font-size: 1.2rem; color: #666; margin-top: 0.5rem; white-space: nowrap;">{notebook_name}</div>', unsafe_allow_html=True)
-                with col_edit:
-                    if st.button("✏️", key=f"edit_trigger_{st.session_state.selected_notebook}", help="Edit notebook name"):
-                        st.session_state[edit_key] = True
-                        st.rerun()
+                # Display mode - clickable button to edit
+                if st.button(f"{notebook_name} ✏️", key=f"edit_trigger_{st.session_state.selected_notebook}", help="Click to edit notebook name"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
     
-    with col_top2:
+    with col_select:
         if notebooks:
             notebook_options = ["Select a notebook..."] + [notebooks[nb]['name'] for nb in notebooks.keys()]
             notebook_ids = ["None"] + list(notebooks.keys())
@@ -423,7 +426,7 @@ def main():
         else:
             st.selectbox("Notebook", ["No notebooks"], key="notebook_selector_empty", label_visibility="collapsed", disabled=True)
     
-    with col_top3:
+    with col_create:
         with st.expander("➕ Notebook", expanded=False):
             new_notebook_name = st.text_input("New Notebook Name", key="new_notebook_top", label_visibility="collapsed", placeholder="New Notebook Name")
             if st.button("Create", key="create_notebook_btn_top", use_container_width=True):
@@ -433,7 +436,7 @@ def main():
                 else:
                     st.error("Please enter a valid notebook name or notebook already exists")
     
-    with col_top4:
+    with col_logout:
         st.button("Log out", on_click=logout, key="logout_btn_top", use_container_width=True)
     
     st.markdown("---")

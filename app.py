@@ -3,6 +3,7 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
+from utils.encryption import encrypt_data, decrypt_data, is_encryption_enabled
 
 # Configuration
 DATA_DIR = Path("data")
@@ -14,14 +15,43 @@ DATA_DIR.mkdir(exist_ok=True)
 def load_notebooks():
     """Load all notebooks from storage"""
     if NOTEBOOKS_FILE.exists():
-        with open(NOTEBOOKS_FILE, 'r') as f:
-            return json.load(f)
+        try:
+            # Try reading as encrypted first
+            with open(NOTEBOOKS_FILE, 'rb') as f:
+                file_content = f.read()
+                
+            if is_encryption_enabled():
+                # Try to decrypt
+                decrypted_content = decrypt_data(file_content)
+                return json.loads(decrypted_content.decode('utf-8'))
+            else:
+                # If encryption not enabled, try to load as plain json
+                # This handles the case where we might have encrypted data but no key (will fail)
+                # or plain data and no key (will work)
+                return json.loads(file_content.decode('utf-8'))
+        except Exception:
+            # Fallback to plain text reading for migration or error recovery
+            try:
+                with open(NOTEBOOKS_FILE, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Error loading notebooks: {e}")
+                return {}
     return {}
 
 def save_notebooks(notebooks):
     """Save all notebooks to storage"""
-    with open(NOTEBOOKS_FILE, 'w') as f:
-        json.dump(notebooks, f, indent=2)
+    json_data = json.dumps(notebooks, indent=2)
+    
+    if is_encryption_enabled():
+        # Encrypt and save as binary
+        encrypted_data = encrypt_data(json_data.encode('utf-8'))
+        with open(NOTEBOOKS_FILE, 'wb') as f:
+            f.write(encrypted_data)
+    else:
+        # Save as plain text
+        with open(NOTEBOOKS_FILE, 'w') as f:
+            f.write(json_data)
 
 def initialize_session_state():
     """Initialize session state variables"""
